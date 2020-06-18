@@ -1,0 +1,94 @@
+- name: cluster_health
+  interval: "*/10 * * * * *"
+  search_index: ".monitoring-es-7-*"
+  search_type: "doc"
+  search: {
+    "size": 0,
+    "query": {
+      "bool": {
+        "filter": {
+          "bool": {
+            "must": [
+            {
+              "range": {
+                "timestamp": {
+                  "gte": "now-60s"
+                }
+              }
+            },
+            {
+              "term": {
+                "type": "cluster_stats"
+              }
+            }
+            ]
+          }
+        }
+      }
+    },
+    "aggs": {
+          "cluster_state": {
+            "filters": {
+              "filters": {
+                "yellow": {
+                  "term": {
+                    "cluster_state.status": "yellow"
+                  }
+                },
+                "red": {
+                  "term": {
+                    "cluster_state.status": "red"
+                  }
+                },
+                "green": {
+                  "term": {
+                    "cluster_state.status": "green"
+                  }
+                }
+              }
+            }
+          }
+    }
+  }
+  process:
+    lua_inline: |
+      function serialize(obj)
+          local lua = ""
+          local t = type(obj)
+          if t == "number" then
+              lua = lua .. obj
+          elseif t == "boolean" then
+              lua = lua .. tostring(obj)
+          elseif t == "string" then
+              lua = lua .. string.format("%q", obj)
+          elseif t == "table" then
+              lua = lua .. "{\n"
+          for k, v in pairs(obj) do
+              lua = lua .. "[" .. serialize(k) .. "]=" .. serialize(v) .. ","
+          end
+          local metatable = getmetatable(obj)
+              if metatable ~= nil and type(metatable.__index) == "table" then
+              for k, v in pairs(metatable.__index) do
+                  lua = lua .. "[" .. serialize(k) .. "]=" .. serialize(v) .. ","
+              end
+          end
+              lua = lua .. "}"
+          elseif t == "nil" then
+              return nil
+          else
+              error("can not serialize a " .. t .. " type.")
+          end
+          return lua
+      end
+
+      if ctx.Aggregations.cluster_state.buckets == nil then
+          return {}
+      end
+      local actions = {}
+      for k, v in pairs(ctx.Aggregations.cluster_state.buckets) do
+          if v.doc_count > 0 then
+              local msg = "cluster status [" .. k .. "] count: " .. v.doc_count
+              table.insert(actions, {type="log", message= msg})
+          end
+      end
+      return actions

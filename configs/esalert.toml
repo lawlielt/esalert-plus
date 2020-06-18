@@ -1,0 +1,5 @@
+alerts = "configs/esalert.d"
+es-addr = "10.41.41.145:9200"
+es-user = "elastic"
+es-pass = "123456"
+log-level = "debug"
