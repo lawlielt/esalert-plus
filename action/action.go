@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -50,6 +51,8 @@ func ToActioner(in interface{}) (Action, error) {
 		a = &HTTP{}
 	case "slack":
 		a = &Slack{}
+	case "dingding":
+		a = &DingDing{}
 	default:
 		return Action{}, fmt.Errorf("unknown action type: %q", typ)
 	}
@@ -141,4 +144,52 @@ func (s *Slack) Do(c context.Context) error {
 	}
 	resp.Body.Close()
 	return nil
+}
+
+type DingDing struct {
+	Text string `json:"text" mapstructure:"text"`
+}
+
+func (d *DingDing) Do(c context.Context) error {
+	if config.Opts.DingDingWebhook == "" {
+		return errors.New("DingDing Webhook not set in config")
+	}
+
+	if d.Text == "" {
+		return errors.New("missing required field text in DingDing")
+	}
+
+	r, err := http.NewRequest("POST", config.Opts.DingDingWebhook, bytes.NewBufferString(d.Text))
+    if err != nil {
+    	return err
+	}
+	r.Header.Set("Content-Type", "application/json;charset=utf-8")
+
+
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("non 2xx response code returned: %d", resp.StatusCode)
+	}
+
+	type response struct {
+		ErrCode uint `json:"errcode"`
+		ErrMsg string `json:"errmsg"`
+	}
+	var res response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+    err = json.Unmarshal(body, &res)
+	if res.ErrCode != 0 {
+		return fmt.Errorf("response error: %s", res.ErrMsg)
+	}
+	return nil
+
 }

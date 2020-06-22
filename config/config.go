@@ -24,6 +24,7 @@ var Opts struct {
 	SlackWebhook      string `long:"slack-webhook" description:"Slack webhook url, required if using any Slack actions"`
 	ForceRun          string `long:"force-run" description:"If set with the name of an alert, will immediately run that alert and exit. Useful for testing changes to alert definitions"`
 	LogLevel          string `long:"log-level" default:"info" description:"Adjust the log level. Valid options are: error, warn, info, debug"`
+	DingDingWebhook string `long:"dingding-webhook" description:"dingding webhook url, required if using any Dingding action"`
 }
 
 func init() {

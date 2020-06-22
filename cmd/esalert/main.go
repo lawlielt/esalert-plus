@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ func main() {
 	}
 
 	files := make([]string, 0, 10)
-	if !fstat.IsDir() {
+	if fstat != nil && !fstat.IsDir() {
 		files = append(files, config.Opts.AlertFileDir)
 	} else {
 		fileInfos, err := ioutil.ReadDir(config.Opts.AlertFileDir)
@@ -49,7 +48,6 @@ func main() {
 			log.WithFields(kv).Fatalln("failed to read alert config")
 		}
 
-		fmt.Println(file)
 		if err := yaml.Unmarshal(b, &alerts); err != nil {
 			kv["err"] = err
 			log.WithFields(kv).Fatalln("failed to parse yaml")
