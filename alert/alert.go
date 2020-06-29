@@ -4,6 +4,7 @@ package alert
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"text/template"
 	"time"
 
@@ -27,11 +28,15 @@ type Alert struct {
 	Search      search.Dict       `yaml:"search"`
 	SearchQuery string            `yaml:"search_query"`
 	Process     luautil.LuaRunner `yaml:"process"`
+	ThrottlePeriodStr string      `yaml:"throttle_period"`
+	Metadata map[string]interface{}            `yaml:"metadata"`
 
 	Jobber         *jobber.FullTimeSpec
 	SearchIndexTPL *template.Template
 	SearchTypeTPL  *template.Template
 	SearchTPL      *template.Template
+	ThrottlePeriod uint
+	LastActionTime uint
 }
 
 func templatizeHelper(i interface{}, lastErr error) (*template.Template, error) {
@@ -73,10 +78,16 @@ func (a *Alert) Init() error {
 	}
 	a.Jobber = jb
 
+	a.LastActionTime = 0
+	a.ThrottlePeriod, err = parseThrottlePeriod(a.ThrottlePeriodStr)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (a Alert) Run() {
+func (a *Alert) Run() {
 	kv := log.Fields{
 		"name": a.Name,
 	}
@@ -87,6 +98,7 @@ func (a Alert) Run() {
 		Name:      a.Name,
 		StartedTS: uint64(now.Unix()),
 		Time:      now,
+		Metadata:  a.Metadata,
 	}
 
 	searchIndex, searchType, searchQuery, err := a.CreateSearch(c)
@@ -139,6 +151,7 @@ func (a Alert) Run() {
 			return
 		}
 	}
+	a.LastActionTime = uint(now.Unix())
 }
 
 func (a Alert) CreateSearch(c context.Context) (string, string, interface{}, error) {
@@ -166,4 +179,24 @@ func (a Alert) CreateSearch(c context.Context) (string, string, interface{}, err
 	}
 
 	return searchIndex, searchType, search, nil
+}
+
+func parseThrottlePeriod(throttlePeriodStr string) (uint, error) {
+	var multi int
+	suffix := throttlePeriodStr[len(throttlePeriodStr)-1:]
+	switch suffix {
+	case "s":
+		multi = 1
+	case "m":
+		multi = 60
+	case "h":
+		multi = 3600
+	default:
+		return 0, fmt.Errorf("only support int[s,m,h], now is %s", throttlePeriodStr)
+	}
+	throttlePeriod, err := strconv.Atoi(throttlePeriodStr[:len(throttlePeriodStr)-1])
+	if err != nil {
+		return 0, err
+	}
+	return uint(throttlePeriod * multi), nil
 }

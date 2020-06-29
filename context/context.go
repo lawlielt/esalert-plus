@@ -16,4 +16,5 @@ type Context struct {
 	StartedTS     uint64
 	search.Result `luautil:",inline"`
 	time.Time     `luautil:"-"`
+	Metadata      map[string]interface{}
 }

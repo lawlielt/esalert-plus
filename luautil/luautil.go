@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"esalert/config"
 	"esalert/context"
@@ -30,6 +31,15 @@ func (l *LuaRunner) Do(c context.Context) (interface{}, bool) {
 	if l.File != "" {
 		return RunFile(c, l.File)
 	} else if l.Inline != "" {
+		t, err := template.New("").Parse(l.Inline)
+		if err != nil {
+			return nil, false
+		}
+		buf := bytes.NewBuffer(make([]byte, 0, 1024))
+		if err := t.Execute(buf, c); err != nil {
+			return nil, false
+		}
+		l.Inline = buf.String()
 		return RunInline(c, l.Inline)
 	}
 	return nil, false

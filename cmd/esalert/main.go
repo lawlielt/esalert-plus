@@ -84,8 +84,9 @@ func main() {
 func alertSpin(a alert.Alert) {
 	for {
 		now := time.Now()
+		nowUnix := uint(now.Unix())
 		next := a.Jobber.Next(now)
-		if now == next {
+		if now == next && nowUnix - a.LastActionTime > a.ThrottlePeriod {
 			go a.Run()
 			time.Sleep(time.Second)
 		} else {
