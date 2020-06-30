@@ -3,13 +3,12 @@
 package config
 
 import (
-	"runtime"
-	"strings"
-	"time"
-
+	custom_log "esalert/log"
 	"github.com/Akagi201/utilgo/conflag"
 	flags "github.com/jessevdk/go-flags"
 	log "github.com/sirupsen/logrus"
+	"runtime"
+	"strings"
 )
 
 // Opts configs
@@ -24,6 +23,7 @@ var Opts struct {
 	SlackWebhook      string `long:"slack-webhook" description:"Slack webhook url, required if using any Slack actions"`
 	ForceRun          string `long:"force-run" description:"If set with the name of an alert, will immediately run that alert and exit. Useful for testing changes to alert definitions"`
 	LogLevel          string `long:"log-level" default:"info" description:"Adjust the log level. Valid options are: error, warn, info, debug"`
+	LogDir            string `long:"log-dir" default:"os.stdout" description:"log dir, default to stdout"`
 	DingDingWebhook string `long:"dingding-webhook" description:"dingding webhook url, required if using any Dingding action"`
 }
 
@@ -49,13 +49,25 @@ func init() {
 
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
-		TimestampFormat: time.RFC3339,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DisableColors:true,
 	})
 	level, err := log.ParseLevel(strings.ToLower(Opts.LogLevel))
 	if err == nil {
 		log.SetLevel(level)
 	} else {
 		log.Errorf("invalid log level: %s", Opts.LogLevel)
+	}
+	if Opts.LogDir != "" {
+	    for {
+			writer, err := custom_log.NewWriter(Opts.LogDir, log.AllLevels)
+			if err != nil {
+				log.Errorf(err.Error())
+				break
+			}
+			log.AddHook(writer)
+			break
+		}
 	}
 
 	log.Infof("esalert opts: %+v", Opts)
