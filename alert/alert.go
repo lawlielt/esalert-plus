@@ -150,8 +150,8 @@ func (a *Alert) Run() {
 			log.WithFields(kv).Errorln("failed to complete action")
 			return
 		}
+		a.LastActionTime = uint(now.Unix())
 	}
-	a.LastActionTime = uint(now.Unix())
 }
 
 func (a Alert) CreateSearch(c context.Context) (string, string, interface{}, error) {
