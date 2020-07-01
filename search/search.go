@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"esalert/config"
 	log "github.com/sirupsen/logrus"
@@ -101,7 +102,6 @@ func mapToDict(m map[interface{}]interface{}) (Dict, error) {
 // (see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-request-body.html)
 func Search(index, typ string, search interface{}) (Result, error) {
 	//u := fmt.Sprintf("http://%s/%s/%s/_search", config.Opts.ElasticSearchAddr, index, typ)
-	u := fmt.Sprintf("http://%s/%s/_search", config.Opts.ElasticSearchAddr, index)
 	bodyReq, err := json.Marshal(search)
 	if err != nil {
 		return Result{}, err
@@ -111,50 +111,59 @@ func Search(index, typ string, search interface{}) (Result, error) {
 		"body": string(bodyReq),
 	}).Debugln("search query")
 
-	req, err := http.NewRequest(http.MethodPost, u, bytes.NewBuffer(bodyReq))
-	if err != nil {
-		return Result{}, err
-	}
+	addrs := strings.Split(config.Opts.ElasticSearchAddr, ",")
+	for _, addr := range addrs {
+		addr = strings.TrimSpace(addr)
+		u := fmt.Sprintf("http://%s/%s/_search", addr, index)
 
-	if config.Opts.ElasticSearchUser != "" && config.Opts.ElasticSearchPass != "" {
-		req.SetBasicAuth(config.Opts.ElasticSearchUser, config.Opts.ElasticSearchPass)
-	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return Result{}, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return Result{}, err
-	}
-
-	log.WithFields(log.Fields{
-		"body": string(body),
-	}).Debugln("search results")
-
-	if resp.StatusCode != 200 {
-		var e elasticError
-		if err := json.Unmarshal(body, &e); err != nil {
-			log.Errorf("could not unmarshal error body, %v", err)
+		req, err := http.NewRequest(http.MethodPost, u, bytes.NewBuffer(bodyReq))
+		if err != nil {
 			return Result{}, err
 		}
-		return Result{}, errors.New(fmt.Sprintf("HTTP status code: %v", resp.StatusCode))
-	}
 
-	var result Result
-	if err := json.Unmarshal(body, &result); err != nil {
+		if config.Opts.ElasticSearchUser != "" && config.Opts.ElasticSearchPass != "" {
+			req.SetBasicAuth(config.Opts.ElasticSearchUser, config.Opts.ElasticSearchPass)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return Result{}, err
+		}
+
 		log.WithFields(log.Fields{
 			"body": string(body),
-		}).Errorf("could not unmarshal search result, %v", err)
-		return result, err
-	} else if result.TimedOut {
-		return result, errors.New("search timed out in elasticsearch")
-	}
+		}).Debugln("search results")
 
-	return result, nil
+		if resp.StatusCode != 200 {
+			var e elasticError
+			if err := json.Unmarshal(body, &e); err != nil {
+				log.Errorf("could not unmarshal error body, %v", err)
+				return Result{}, err
+			}
+			return Result{}, errors.New(fmt.Sprintf("HTTP status code: %v", resp.StatusCode))
+		}
+
+		var result Result
+		if err := json.Unmarshal(body, &result); err != nil {
+			log.WithFields(log.Fields{
+				"body": string(body),
+			}).Errorf("could not unmarshal search result, %v", err)
+			return result, err
+		} else if result.TimedOut {
+			return result, errors.New("search timed out in elasticsearch")
+		}
+
+		return result, nil
+	}
+	return Result{}, errors.New(fmt.Sprintf("not valid hosts[%s]", addrs))
+
 }
