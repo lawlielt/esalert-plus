@@ -1,0 +1,70 @@
+- name: disk
+  interval: "0 */5 * * * *"
+  search_index: "metricbeat-*"
+  search_type: "doc"
+  metadata:
+    threshold: 0.85
+    period: "5m"
+  search: {
+    "aggs": {
+      "host": {
+        "terms": {
+          "field": "host.name",
+          "order": {
+            "disk_usage": "desc"
+          }
+        },
+        "aggs": {
+          "disk_usage": {
+            "max": {
+              "field": "system.filesystem.used.pct"
+            }
+          }
+        }
+      }
+    },
+    "query": {
+      "bool": {
+        "filter": [
+        {
+          "term": {
+            "metricset.name": "filesystem"
+          }
+        },
+        {
+          "range": {
+            "@timestamp": {
+              "gte": "now-{{.Metadata.period}}"
+            }
+          }
+        },
+        {
+          "range": {
+            "system.filesystem.used.pct": {
+              "gte": "{{.Metadata.threshold}}"
+            }
+          }
+        }
+        ]
+      }
+    },
+    "size":0
+  }
+  throttle_period: "30m"
+  process:
+    lua_inline: |
+      if ctx.Aggregations.host.buckets == nil then
+                return {}
+      end
+      local actions = {}
+      for k, v in pairs(ctx.Aggregations.host.buckets) do
+          if v.doc_count > 0 then
+              local msg = "Some hosts are over {{.Metadata.threshold}}% utilized:" .. v.disk_usage.value .. "%-" .. v.key
+              table.insert(actions, {type="log", message= msg})
+              table.insert(actions, {
+                  type="dingding",
+                  text="{\"msgtype\": \"text\", \"text\": { \"content\": \"" .. msg .. "\"}}"
+              })
+          end
+      end
+      return actions

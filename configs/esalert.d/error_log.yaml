@@ -1,0 +1,41 @@
+- name: error_log
+  interval: "0 */1 * * * *"
+  search_index: "filebeat-*"
+  search_type: "doc"
+  search: {
+    "query": {
+      "bool": {
+        "must": [
+        {
+          "query_string": {
+            "query": "error OR loglevel:ERROR",
+            "fields": ["message"]
+          }
+        },
+        {
+          "range": {
+            "@timestamp": {
+              "gte": "now-1m"
+            }
+          }
+        }
+        ]
+      }
+    },
+    "size": 0
+  }
+  throttle_period: "15m"
+  process:
+    lua_inline: |
+      local actions = {}
+      if (ctx.HitCount ~= nil and ctx.HitCount.value ~= nil) then
+          if (ctx.HitCount.value > 0) then
+              local msg = ctx.HitCount.value .. "] errors have occured in the logs"
+              table.insert(actions, {type="log", message= msg})
+              table.insert(actions, {
+                  type="dingding",
+                  text="{\"msgtype\": \"text\", \"text\": { \"content\": \"" .. msg .. "\"}}"
+              })
+          end
+      end
+      return actions
